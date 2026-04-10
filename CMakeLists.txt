@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(needle C CXX)
-cmake_policy(SET CMP0146 OLD)
+if(POLICY CMP0146)
+  cmake_policy(SET CMP0146 OLD)
+endif()
 
 # find correct version of Python
 execute_process(COMMAND python3-config --prefix
@@ -65,8 +67,9 @@ if(CUDA_FOUND)
   if(NV_RET EQUAL "0")
     CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
   else()
-    # set to 3.7 the flag of K80
-    CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS 3.7)
+    # nvidia-smi may be unavailable in containers; pick a modern fallback arch.
+    # CUDA 12+ no longer supports very old SMs like 3.7.
+    CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS 8.0)
   endif()
 
   # set arch flags properly
@@ -85,4 +88,3 @@ if(CUDA_FOUND)
 )
 
 endif()
-

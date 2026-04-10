@@ -68,41 +68,27 @@ class MultiHeadAttention(Module):
 
         return (a * b_transpose).sum(len(a.shape) - 1)
     """
-    def matmul(self, a, b_transpose):
-        # a: (B, H, M, D)
-        # b_transpose: (B, H, D, N)
-        B, H, M, D = a.shape
-        _, _, D2, N = b_transpose.shape
-        assert D == D2
+    def matmul(self, a, b):
+        # a: (B, H, M, K), b: (B, H, K, N)
+        B, H, M, K = a.shape
+        B2, H2, K2, N = b.shape
+        assert B == B2 and H == H2 and K == K2
 
-        a = a.reshape((B, H, M, 1, D)).broadcast_to((B, H, M, N, D))
+        # Use backend matmul kernel per (batch, head) block instead of
+        # materializing huge broadcasted tensors.
+        a_blocks = ops.split(a.reshape((B * H, M, K)), axis=0)
+        b_blocks = ops.split(b.reshape((B * H, K, N)), axis=0)
+        out_blocks = [ops.matmul(a_blocks[i], b_blocks[i]) for i in range(B * H)]
 
-        b = ops.transpose(b_transpose, axes=(2, 3))   # (B, H, N, D)
-        b = b.reshape((B, H, 1, N, D)).broadcast_to((B, H, M, N, D))
-
-        return (a * b).sum(axes=4)
+        return ops.stack(out_blocks, axis=0).reshape((B, H, M, N))
 
     def softmax(self, logit):
         """
         The softmax function; 
         """
-        max_val = Tensor(
-            logit.realize_cached_data().max(axis=3),
-            device=logit.device,
-            dtype=logit.dtype,
-            requires_grad=False
-        )
-
-        max_val = max_val.reshape((*logit.shape[:-1], 1))
-        max_val = max_val.broadcast_to(logit.shape)
-
-        probs = ops.exp(logit - max_val)
-
-        denom = probs.sum(axes=3)
-        denom = denom.reshape((*logit.shape[:-1], 1))
-        denom = denom.broadcast_to(logit.shape)
-
-        return probs / denom
+        lse = ops.logsumexp(logit, axes=(3,))
+        lse = lse.reshape((*logit.shape[:-1], 1)).broadcast_to(logit.shape)
+        return ops.exp(logit - lse)
 
     def forward(
         self,

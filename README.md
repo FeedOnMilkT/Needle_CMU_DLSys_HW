@@ -52,3 +52,38 @@ Overall, this project significantly improved my systems-level intuition for how 
 - Large datasets and generated artifacts are intentionally excluded from version control.
 - The focus of this repo is educational value and systems understanding rather than completeness.
 
+## Project-Specific Changes vs. Original Homework Baseline
+
+This repository includes several practical changes beyond the original course homework baseline:
+
+- **Device consistency fixes during training**  
+  The original workflow could hit mixed-device issues (even when CUDA was explicitly selected), where different modules/tensors were not always aligned on the same device.  
+  This repo includes fixes to keep module parameters, buffers, and runtime-created tensors on consistent devices.
+
+- **Transformer implementation differs from the baseline**  
+  The Transformer path in this repo is implemented differently from the original baseline and relies on custom operators from `python/needle/ops`.
+
+- **Added runnable training entry notebook**  
+  A dedicated notebook is provided for end-to-end experimentation:
+  - [needle_train_entry.ipynb](./needle_train_entry.ipynb)  
+  It includes backend build steps, dataset download, and training/inference flows for vision and language tasks.
+
+## Training Performance Warning
+
+Full training is generally **not recommended** in this project unless you specifically want to profile/debug it.
+
+Needle here is primarily an educational framework and does not include many production-grade performance optimizations.  
+As a result, training can be very slow, even on high-end GPUs (including A100).
+
+## Environment / Colab Note
+
+Most debugging and iteration for this repository were performed on my own server environment, not Colab.  
+Therefore, smooth execution on Colab is **not guaranteed**.
+
+## Course Link
+
+- CMU Deep Learning Systems course lectures: https://dlsyscourse.org/lectures/
+
+## Contact
+
+- uceeanz@ucl.ac.uk

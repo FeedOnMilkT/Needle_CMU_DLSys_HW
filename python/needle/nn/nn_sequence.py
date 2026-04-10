@@ -85,7 +85,9 @@ class RNNCell(Module):
         ### BEGIN YOUR SOLUTION
         bs = X.shape[0]
         if h is None:
-          h = init.zeros(bs, self.hidden_size, device = self.device, dtype = self.dtype)
+          state_device = self.W_ih.device
+          state_dtype = self.W_ih.dtype
+          h = init.zeros(bs, self.hidden_size, device=state_device, dtype=state_dtype)
 
         out = X @ self.W_ih + h @ self.W_hh
 
@@ -157,8 +159,10 @@ class RNN(Module):
         ### BEGIN YOUR SOLUTION
         seq_len, bs, _ = X.shape
         if h0 is None:
+          state_device = self.rnn_cells[0].W_ih.device
+          state_dtype = self.rnn_cells[0].W_ih.dtype
           h0 = init.zeros(self.num_layers, bs, self.hidden_size,
-                           device=self.device, dtype=self.dtype)
+                           device=state_device, dtype=state_dtype)
         
         inputs = list(ops.split(X, axis = 0))
         hidden_states = list(ops.split(h0, axis = 0))
@@ -263,8 +267,10 @@ class LSTMCell(Module):
         bs = X.shape[0]
 
         if h is None:
-            h0 = init.zeros(bs, self.hidden_size, device=self.device, dtype=self.dtype)
-            c0 = init.zeros(bs, self.hidden_size, device=self.device, dtype=self.dtype)
+            state_device = self.W_ih.device
+            state_dtype = self.W_ih.dtype
+            h0 = init.zeros(bs, self.hidden_size, device=state_device, dtype=state_dtype)
+            c0 = init.zeros(bs, self.hidden_size, device=state_device, dtype=state_dtype)
         else:
             h0, c0 = h
 
@@ -357,10 +363,12 @@ class LSTM(Module):
         seq_len, bs, _ = X.shape
 
         if h is None:
+            state_device = self.lstm_cells[0].W_ih.device
+            state_dtype = self.lstm_cells[0].W_ih.dtype
             h0 = init.zeros(self.num_layers, bs, self.hidden_size,
-                            device=self.device, dtype=self.dtype)
+                            device=state_device, dtype=state_dtype)
             c0 = init.zeros(self.num_layers, bs, self.hidden_size,
-                            device=self.device, dtype=self.dtype)
+                            device=state_device, dtype=state_dtype)
         else:
             h0, c0 = h
 
@@ -458,13 +466,15 @@ class Embedding(Module):
         seq_len, bs = x.shape
 
         # init.one_hot expects i to be a Needle Tensor, because inside it calls i.numpy()
+        emb_device = self.weight.device
+        emb_dtype = self.weight.dtype
         if isinstance(x, np.ndarray):
-            x_idx = Tensor(x.astype("int32").reshape(-1), device=self.device, requires_grad=False)
+            x_idx = Tensor(x.astype("int32").reshape(-1), device=emb_device, requires_grad=False)
         else:
-            x_idx = Tensor(x.numpy().astype("int32").reshape(-1), device=self.device, requires_grad=False)
+            x_idx = Tensor(x.numpy().astype("int32").reshape(-1), device=emb_device, requires_grad=False)
 
         x_one_hot = init.one_hot(
-            self.num_embeddings, x_idx, device=self.device, dtype=self.dtype
+            self.num_embeddings, x_idx, device=emb_device, dtype=emb_dtype
         )
         out = x_one_hot @ self.weight
         return out.reshape((seq_len, bs, self.embedding_dim))

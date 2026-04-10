@@ -14,6 +14,26 @@ from apps.models import *
 import time
 device = ndl.cpu()
 
+try:
+    from tqdm.auto import tqdm as _tqdm
+except Exception:
+    _tqdm = None
+
+
+def _as_scalar(x):
+    """Convert numpy/needle scalar-like values to a Python float."""
+    arr = np.asarray(x)
+    if arr.size != 1:
+        raise ValueError(f"Expected scalar-like value, got shape {arr.shape}")
+    return float(arr.reshape(-1)[0])
+
+
+def _progress(iterable, enabled=False, **kwargs):
+    if enabled and _tqdm is not None:
+        return _tqdm(iterable, **kwargs)
+    return iterable
+
+
 def parse_mnist(image_filename, label_filename):
     """Read an images and labels file in MNIST format.  See this page:
     http://yann.lecun.com/exdb/mnist/ for a description of the file format.
@@ -93,7 +113,14 @@ def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
 ### CIFAR-10 training ###
 ### CIFAR-10 training ###
 ### CIFAR-10 training ###
-def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None):
+def epoch_general_cifar10(
+    dataloader,
+    model,
+    loss_fn=nn.SoftmaxLoss(),
+    opt=None,
+    show_progress=True,
+    progress_desc=None,
+):
     """
     Iterates over the dataloader. If optimizer is not None, sets the
     model to train mode, and for each batch updates the model parameters.
@@ -113,8 +140,18 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
 
     model_device = model.parameters()[0].device
     model_dtype = model.parameters()[0].dtype
+    # Keep non-parameter buffers (e.g., BatchNorm running stats) aligned with params.
+    if hasattr(model, "to"):
+        model.to(device=model_device, dtype=model_dtype)
 
-    for batch in dataloader:
+    pbar = _progress(
+        dataloader,
+        enabled=show_progress,
+        desc=progress_desc if progress_desc is not None else ("CIFAR train" if opt is not None else "CIFAR eval"),
+        unit="batch",
+        leave=False,
+    )
+    for batch in pbar:
         X, y = batch
 
         # move batch to same device as model
@@ -136,8 +173,15 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
 
         batch_size = labels.shape[0]
         total_correct += int(np.sum(preds == labels))
-        total_loss += float(loss.numpy()) * batch_size
+        total_loss += _as_scalar(loss.numpy()) * batch_size
         total_samples += batch_size
+        if hasattr(pbar, "set_postfix"):
+            pbar.set_postfix(
+                {
+                    "acc": f"{(total_correct / max(total_samples, 1)):.4f}",
+                    "loss": f"{(total_loss / max(total_samples, 1)):.4f}",
+                }
+            )
 
     avg_acc = total_correct / total_samples
     avg_loss = total_loss / total_samples
@@ -145,7 +189,7 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
 
 
 def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
-          lr=0.001, weight_decay=0.001, loss_fn=nn.SoftmaxLoss):
+          lr=0.001, weight_decay=0.001, loss_fn=nn.SoftmaxLoss, show_progress=True):
     """
     Performs {n_epochs} epochs of training.
     """
@@ -156,23 +200,25 @@ def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
 
     for _ in range(n_epochs):
         avg_acc, avg_loss = epoch_general_cifar10(
-            dataloader, model, loss_fn=loss_fn(), opt=opt
+            dataloader, model, loss_fn=loss_fn(), opt=opt, show_progress=show_progress
         )
 
     return avg_acc, avg_loss
 
 
-def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss):
+def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss, show_progress=True):
     """
     Computes the test accuracy and loss of the model.
     """
     np.random.seed(4)
-    return epoch_general_cifar10(dataloader, model, loss_fn=loss_fn(), opt=None)
+    return epoch_general_cifar10(
+        dataloader, model, loss_fn=loss_fn(), opt=None, show_progress=show_progress
+    )
 
 
 ### PTB training ###
 def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=None,
-        clip=None, device=None, dtype="float32"):
+        clip=None, device=None, dtype="float32", show_progress=True, progress_desc=None):
     """
     Iterates over the data. If optimizer is not None, sets the
     model to train mode, and for each batch updates the model parameters.
@@ -208,7 +254,20 @@ def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=Non
     total_samples = 0
     h = None
 
-    for i in range(0, data.shape[0] - 1, seq_len):
+    if len(model.parameters()) > 0 and hasattr(model, "to"):
+        model_device = model.parameters()[0].device
+        model_dtype = model.parameters()[0].dtype
+        model.to(device=model_device, dtype=model_dtype)
+
+    steps = list(range(0, data.shape[0] - 1, seq_len))
+    pbar = _progress(
+        steps,
+        enabled=show_progress,
+        desc=progress_desc if progress_desc is not None else ("PTB train" if opt is not None else "PTB eval"),
+        unit="step",
+        leave=False,
+    )
+    for i in pbar:
         X, y = ndl.data.get_batch(data, i, seq_len, device=device, dtype=dtype)
 
         if opt is not None:
@@ -234,7 +293,14 @@ def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=Non
 
         total_correct += np.sum(pred_np == y_np)
         total_samples += y_np.shape[0]
-        total_loss += loss.numpy() * y_np.shape[0]
+        total_loss += _as_scalar(loss.numpy()) * y_np.shape[0]
+        if hasattr(pbar, "set_postfix"):
+            pbar.set_postfix(
+                {
+                    "acc": f"{(total_correct / max(total_samples, 1)):.4f}",
+                    "loss": f"{(total_loss / max(total_samples, 1)):.4f}",
+                }
+            )
 
     avg_acc = total_correct / total_samples
     avg_loss = total_loss / total_samples
@@ -244,7 +310,7 @@ def epoch_general_ptb(data, model, seq_len=40, loss_fn=nn.SoftmaxLoss(), opt=Non
 
 def train_ptb(model, data, seq_len=40, n_epochs=1, optimizer=ndl.optim.SGD,
           lr=4.0, weight_decay=0.0, loss_fn=nn.SoftmaxLoss, clip=None,
-          device=None, dtype="float32"):
+          device=None, dtype="float32", show_progress=True):
     """
     Performs {n_epochs} epochs of training.
 
@@ -271,13 +337,13 @@ def train_ptb(model, data, seq_len=40, n_epochs=1, optimizer=ndl.optim.SGD,
     for _ in range(n_epochs):
         avg_acc, avg_loss = epoch_general_ptb(
             data, model, seq_len=seq_len, loss_fn=loss_fn,
-            opt=opt, clip=clip, device=device, dtype=dtype
+            opt=opt, clip=clip, device=device, dtype=dtype, show_progress=show_progress
         )
     return avg_acc, avg_loss
     ### END YOUR SOLUTION
 
 def evaluate_ptb(model, data, seq_len=40, loss_fn=nn.SoftmaxLoss,
-        device=None, dtype="float32"):
+        device=None, dtype="float32", show_progress=True):
     """
     Computes the test accuracy and loss of the model.
 
@@ -295,7 +361,7 @@ def evaluate_ptb(model, data, seq_len=40, loss_fn=nn.SoftmaxLoss,
     ### BEGIN YOUR SOLUTION
     return epoch_general_ptb(
         data, model, seq_len=seq_len, loss_fn=loss_fn,
-        opt=None, device=device, dtype=dtype
+        opt=None, device=device, dtype=dtype, show_progress=show_progress
     )
     ### END YOUR SOLUTION
 

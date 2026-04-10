@@ -1,4 +1,5 @@
-"""The module.
+"""
+The module.
 """
 from typing import Any
 from needle.autograd import Tensor
@@ -69,6 +70,60 @@ class Module:
         self.training = True
         for m in self._children():
             m.training = True
+
+    @staticmethod
+    def _move_value(value: object, device: Any | None = None, dtype: str | None = None):
+        if isinstance(value, Parameter):
+            target_device = device if device is not None else value.device
+            target_dtype = dtype if dtype is not None else value.dtype
+            if value.device == target_device and value.dtype == target_dtype:
+                return value
+            moved = Tensor(
+                value,
+                device=target_device,
+                dtype=target_dtype,
+                requires_grad=value.requires_grad,
+            )
+            # In-place update keeps object identity so optimizer param refs stay valid.
+            value.cached_data = moved.realize_cached_data()
+            value.requires_grad = moved.requires_grad
+            return value
+        if isinstance(value, Tensor):
+            target_device = device if device is not None else value.device
+            target_dtype = dtype if dtype is not None else value.dtype
+            if value.device == target_device and value.dtype == target_dtype:
+                return value
+            moved = Tensor(
+                value,
+                device=target_device,
+                dtype=target_dtype,
+                requires_grad=value.requires_grad,
+            )
+            value.cached_data = moved.realize_cached_data()
+            value.requires_grad = moved.requires_grad
+            return value
+        if isinstance(value, Module):
+            value.to(device=device, dtype=dtype)
+            return value
+        if isinstance(value, dict):
+            return {k: Module._move_value(v, device=device, dtype=dtype) for k, v in value.items()}
+        if isinstance(value, list):
+            return [Module._move_value(v, device=device, dtype=dtype) for v in value]
+        if isinstance(value, tuple):
+            return tuple(Module._move_value(v, device=device, dtype=dtype) for v in value)
+        return value
+
+    def to(self, device: Any | None = None, dtype: str | None = None):
+        """Recursively move module parameters/buffers to the target device/dtype."""
+        for k, v in list(self.__dict__.items()):
+            if k == "training":
+                continue
+            self.__dict__[k] = self._move_value(v, device=device, dtype=dtype)
+        if hasattr(self, "device") and device is not None:
+            self.device = device
+        if hasattr(self, "dtype") and dtype is not None:
+            self.dtype = dtype
+        return self
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
