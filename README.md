@@ -36,6 +36,16 @@ Instead, it reflects my effort to build practical understanding of:
 - model building abstractions
 - training/inference system fundamentals
 
+## Learning Takeaways
+
+This project gave me a much clearer understanding of how a deep learning framework executes a model through a computational graph.
+
+Through implementing the assignments, I developed a more concrete understanding of how the computational graph is constructed during the forward pass, how individual operator nodes work, and how gradients are propagated during backpropagation. I also gained a better sense of the overall development paradigm used in deep learning frameworks, including how tensor operations, modules, and automatic differentiation are organized together into a reusable system.
+
+In addition, this project helped me understand how an ndarray backend works in practice, including tensor shape handling, memory layout, operator dispatch, and backend execution on CPU and CUDA. It also strengthened my understanding of how common deep learning building blocks are implemented, including normalization layers, convolution layers, recurrent modules, attention mechanisms, and Transformer components.
+
+Overall, this project significantly improved my systems-level intuition for how modern deep learning frameworks are designed and how models are executed from low-level tensor operations up to higher-level neural network abstractions.
+
 ## Notes
 
 - This is a study-oriented repository, so some code structure follows the original homework organization.
