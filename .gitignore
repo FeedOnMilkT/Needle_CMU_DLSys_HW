@@ -1,0 +1,40 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.pytest_cache/
+
+.venv/
+venv/
+env/
+
+build/
+dist/
+*.so
+*.o
+*.a
+
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+*.log
+*.out
+
+# 如果你不想把测试标签/中间文件传上去，可保留下面这些
+# 如果作业要求保留 tests data，就把 *.npy / *.npz 注释掉
+*.npy
+*.npz
+
+# 数据集
+data/
+datasets/
+mnist/
+cifar-10-batches-py/
+*.gz
+*.tar
+*.zip
+
+.DS_Store

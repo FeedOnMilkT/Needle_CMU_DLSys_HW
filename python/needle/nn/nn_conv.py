@@ -7,6 +7,8 @@ import needle.init as init
 import numpy as np
 from .nn_basic import Parameter, Module
 
+import math
+
 
 class Conv(Module):
     """
@@ -27,11 +29,61 @@ class Conv(Module):
         self.kernel_size = kernel_size
         self.stride = stride
 
+        self.device = device
+        self.dtype = dtype
+
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.padding = kernel_size // 2
+
+        fan_in = in_channels * kernel_size * kernel_size
+        fan_out = out_channels * kernel_size * kernel_size\
+
+        self.weight = Parameter(
+          init.kaiming_uniform(
+            fan_in,
+            fan_out,
+            shape = (kernel_size, kernel_size, in_channels, out_channels),
+            device = device,
+            dtype = dtype,
+            requires_grad = True,
+          )
+        )
+
+        if bias:
+            bound = 1 / math.sqrt(in_channels * kernel_size * kernel_size)
+            self.bias = Parameter(
+                init.rand(
+                    out_channels,
+                    low=-bound,
+                    high=bound,
+                    device=device,
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+            )
+        else:
+            self.bias = None
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        x = ops.transpose(x, axes = (1, 2))
+        x= ops.transpose(x, axes=(2, 3))
+
+        out = ops.conv(
+          x,
+          self.weight,
+          stride = self.stride,
+          padding = self.padding
+        )
+
+        if self.bias is not None:
+            bias = ops.reshape(self.bias, (1, 1, 1, self.out_channels))
+            bias = ops.broadcast_to(bias, out.shape)
+            out = out + bias
+
+        out = ops.transpose(out, axes=(2, 3))
+        out = ops.transpose(out, axes=(1, 2))
+
+        return out
         ### END YOUR SOLUTION

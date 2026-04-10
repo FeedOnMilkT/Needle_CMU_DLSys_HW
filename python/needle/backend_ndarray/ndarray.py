@@ -4,6 +4,7 @@ from functools import reduce
 from typing import Any, Callable, Iterable, Union
 
 import numpy as np
+from numpy._core import einsumfunc
 
 from . import ndarray_backend_numpy
 from . import ndarray_backend_cpu  # type: ignore[attr-defined]
@@ -262,7 +263,18 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if prod(self._shape) != prod(new_shape):
+          raise ValueError("product of shape is not equal")
+        if not self.is_compact():
+          raise ValueError("reshape requires compact array")
+
+        return NDArray.make(
+          new_shape,
+          strides=NDArray.compact_strides(new_shape),
+          device = self.device,
+          handle=self._handle,
+          offset = self._offset
+        )
         ### END YOUR SOLUTION
 
     def permute(self, new_axes: tuple[int, ...]) -> "NDArray":
@@ -287,7 +299,16 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = tuple(self._shape[i] for i in new_axes)
+        new_strides = tuple(self._strides[i] for i in new_axes)
+
+        return NDArray.make(
+          new_shape,
+          new_strides,
+          device=self.device,
+          handle=self._handle,
+          offset=self._offset,
+        )
         ### END YOUR SOLUTION
 
     def broadcast_to(self, new_shape: tuple[int, ...]) -> "NDArray":
@@ -311,7 +332,39 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        old_shape = self._shape
+        old_strides = self._strides
+
+        if len(new_shape) < len(old_shape):
+          return ValueError("cannot broadcast to fewer dimensions")
+
+        new_strides = [0] * len(new_shape)
+
+        old_i = len(old_shape) - 1
+        new_i = len(new_shape) - 1
+
+        while new_i >= 0:
+          if old_i >= 0:
+            if old_shape[old_i] == new_shape[new_i]:
+              new_strides[new_i] = old_strides[old_i]
+            elif old_shape[old_i] == 1:
+              new_strides[new_i] = 0
+            else:
+              raise ValueError("shapes not compatible for broadcast")
+
+            old_i -= 1
+            new_i -= 1
+          else:
+            new_strides[new_i] = 0
+            new_i -= 1
+
+        return NDArray.make(
+          new_shape,
+          strides = tuple(new_strides),
+          device=self.device,
+          handle=self._handle,
+          offset= self._offset
+        )
         ### END YOUR SOLUTION]
 
     ### Get and set elements
@@ -378,7 +431,26 @@ class NDArray:
         assert len(slices) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = []
+        new_strides = []
+        new_offset = self._offset
+
+        for i, sl in enumerate(slices):
+          start, stop, step = sl.start, sl.stop, sl.step
+          old_stride = self._strides[i]
+
+          new_offset += start * old_stride
+          new_strides.append(old_stride * step)
+          new_dim = (stop - start + step - 1) // step
+          new_shape.append(new_dim)
+
+        return NDArray.make(
+          tuple(new_shape),
+          tuple(new_strides),
+          self.device,
+          handle = self._handle,
+          offset = new_offset
+        )
         ### END YOUR SOLUTION
 
     def __setitem__(self, idxs: int | slice | tuple[int | slice, ...], other: Union["NDArray", float]) -> None:
@@ -593,7 +665,20 @@ class NDArray:
         Note: compact() before returning.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_strides = list(self.strides)
+        new_offset = self._offset
+
+        for ax in axes:
+          new_offset += (self.shape[ax] - 1) * self.strides[ax]
+          new_strides[ax] = -new_strides[ax]
+
+        return NDArray.make(
+          self.shape,
+          strides=tuple(new_strides),
+          device = self.device,
+          handle = self._handle,
+          offset=new_offset,
+        ).compact()
         ### END YOUR SOLUTION
 
     def pad(self, axes: tuple[tuple[int, int], ...]) -> "NDArray":
@@ -603,7 +688,16 @@ class NDArray:
         axes = ( (0, 0), (1, 1), (0, 0)) pads the middle axis with a 0 on the left and right side.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = []
+        slices = []
+
+        for i, (left, right) in enumerate(axes):
+          new_shape.append(self.shape[i] + left + right)
+          slices.append(slice(left, left + self.shape[i], 1))
+        
+        out = self.device.full(tuple(new_shape), 0)
+        out[tuple(slices)] = self
+        return out
         ### END YOUR SOLUTION
 
 def array(a: Any, dtype: str = "float32", device: BackendDevice | None = None) -> NDArray:
@@ -653,3 +747,6 @@ def sum(a: NDArray, axis: int | tuple[int] | list[int] | None = None, keepdims: 
 
 def flip(a: NDArray, axes: tuple[int, ...]) -> NDArray:
     return a.flip(axes)
+
+def max(a: NDArray, axis: int | tuple[int] | list[int] | None = None, keepdims: bool = False) -> NDArray:
+    return a.max(axis=axis, keepdims=keepdims)

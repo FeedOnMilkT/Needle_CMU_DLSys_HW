@@ -3,7 +3,7 @@ from ..autograd import Tensor
 
 from typing import Iterator, Optional, List, Sized, Union, Iterable, Any
 
-
+# HW4
 
 class Dataset:
     r"""An abstract class representing a `Dataset`.
@@ -60,12 +60,27 @@ class DataLoader:
 
     def __iter__(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if self.shuffle:
+          indices = np.random.permutation(len(self.dataset))
+          self.ordering = np.array_split(
+            indices,
+            range(self.batch_size, len(self.dataset), self.batch_size)
+          )
+        self.batch_index = 0
         ### END YOUR SOLUTION
         return self
 
     def __next__(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if self.batch_index >= len(self.ordering):
+          raise StopIteration
+
+        batch_indice = self.ordering[self.batch_index]
+        self.batch_index += 1
+
+        batch = [self.dataset[i] for i in batch_indice]
+        batch = list(zip(*batch))
+
+        return [Tensor(np.array(x)) for x in batch]
         ### END YOUR SOLUTION
 

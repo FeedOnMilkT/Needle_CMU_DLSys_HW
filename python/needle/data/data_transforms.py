@@ -1,5 +1,7 @@
 import numpy as np
 
+# HW4
+
 class Transform:
     def __call__(self, x):
         raise NotImplementedError
@@ -20,7 +22,10 @@ class RandomFlipHorizontal(Transform):
         """
         flip_img = np.random.rand() < self.p
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if flip_img:
+          return img[:, ::-1, :]
+        return img
+
         ### END YOUR SOLUTION
 
 
@@ -38,5 +43,16 @@ class RandomCrop(Transform):
         """
         shift_x, shift_y = np.random.randint(low=-self.padding, high=self.padding+1, size=2)
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        H, W, C = img.shape
+        p = self.padding
+        padded = np.pad(
+          img,
+          ((p, p), (p, p), (0, 0)),
+          mode = "constant"
+        )
+
+        start_x = p + shift_x
+        start_y = p + shift_y
+
+        return padded[start_x: start_x+H, start_y: start_y+W, :]
         ### END YOUR SOLUTION
